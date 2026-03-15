@@ -4,13 +4,18 @@
   "description": "",
   "type": "module",
   "main": "index.js",
+  "types": "index.d.ts",
   "scripts": {
-    "start": "node index.js"
+    "start": "node src/index.js"
   },
   "keywords": [],
   "author": "Artem Hrechuk <hrechuk.artem@gmail.com>",
   "license": "MIT",
   "dependencies": {
-    "chokidar": "3.6.0"
+    "chokidar": "5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "25.5.0",
+    "typescript": "5.2.2"
   }
 }
