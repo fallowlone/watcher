@@ -19,7 +19,7 @@ class FileMover {
 
       console.log(`Moved to ${os.homedir()}/${this.destination}`);
     } catch (e) {
-      console.log(e);
+      throw new Error(`Failed to move ${source} to ${this.destination}`);
     }
   }
 

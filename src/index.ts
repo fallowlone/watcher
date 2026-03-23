@@ -1,8 +1,7 @@
-import os from "os";
-import path from "path";
 import Watcher from "./watcher.ts";
+import ConfigManager from "./config-manager.ts";
 
-const watchPath = path.join(os.homedir(), "Downloads");
-const quarantinePath = path.join(os.homedir(), ".quarantine");
+const config = new ConfigManager();
+const { watchPath, quarantinePath } = config.getConfig();
 
 new Watcher(watchPath, [".DS_Store"], quarantinePath);

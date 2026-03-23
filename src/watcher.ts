@@ -31,16 +31,23 @@ class Watcher {
     watcher.on("add", async (filepath, stats) => {
       const fileName = basename(filepath);
 
-      await this.fileMover.move(filepath);
+      try {
+        await this.fileMover.move(filepath);
 
-      await this.filePermissions.changePermissions(
-        join(this.quarantinePath, fileName),
-        0o444,
-      );
+        await this.filePermissions.changePermissions(
+          join(this.quarantinePath, fileName),
+          0o444,
+        );
 
-      console.log(`
+        console.log(`
       Path: ${filepath}
       Filename: ${fileName}`);
+      } catch (error) {
+        console.log(`Failed to move ${filepath} to quarantine: ${error}`);
+      }
+    });
+    watcher.on("error", (error) => {
+      console.log(`Watcher error: ${error}`);
     });
 
     return watcher;
