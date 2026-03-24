@@ -17,7 +17,7 @@ class FileMover {
 
       await rename(source, join(this.destination, fileName));
 
-      console.log(`Moved to ${os.homedir()}/${this.destination}`);
+      console.log(`Moved to ${this.destination}`);
     } catch (e) {
       throw new Error(`Failed to move ${source} to ${this.destination}`);
     }

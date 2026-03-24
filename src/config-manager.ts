@@ -9,7 +9,7 @@ interface IConfigManager {
 
 const defaultConfig: IConfigManager = {
   watchPath: os.homedir() + "/Downloads",
-  quarantinePath: os.homedir() + "/Downloads/quarantine",
+  quarantinePath: os.homedir() + "/.file-sandbox/quarantine",
   apiKey: "",
 };
 

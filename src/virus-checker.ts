@@ -31,7 +31,15 @@ class VirusChecker {
     const response = (await request.json()) as IVTResponse;
 
     while (true) {
-      const status = await fetch(this.apiUrl + `analyses/${response.data.id}`);
+      const status = await fetch(
+        this.apiUrl + `/analyses/${response.data.id}`,
+        {
+          method: "GET",
+          headers: {
+            "x-apikey": this.apiKey,
+          },
+        },
+      );
 
       const { data } = (await status.json()) as AnalysisResponse;
 
