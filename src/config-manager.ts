@@ -4,11 +4,13 @@ import { readFileSync, existsSync, writeFileSync, mkdirSync } from "fs";
 interface IConfigManager {
   watchPath: string;
   quarantinePath: string;
+  apiKey: string;
 }
 
 const defaultConfig: IConfigManager = {
   watchPath: os.homedir() + "/Downloads",
   quarantinePath: os.homedir() + "/Downloads/quarantine",
+  apiKey: "",
 };
 
 const CONFIG_PATH = os.homedir() + "/.file-sandbox/config.json";

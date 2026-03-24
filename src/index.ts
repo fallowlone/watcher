@@ -4,4 +4,9 @@ import ConfigManager from "./config-manager.ts";
 const config = new ConfigManager();
 const { watchPath, quarantinePath } = config.getConfig();
 
-new Watcher(watchPath, [".DS_Store"], quarantinePath);
+const apiKey = process.env.VT_API_KEY;
+if (!apiKey) {
+  throw new Error("VT_API_KEY is not set");
+}
+
+new Watcher(watchPath, [".DS_Store"], quarantinePath, apiKey).start();
