@@ -1,11 +1,13 @@
 import fs, { type PathOrFileDescriptor } from "fs";
 import type { AnalysisResponse } from "./types/analysis.ts";
+
 interface IVTResponse {
   data: {
     type: "analysis";
-    id: "string";
+    id: string;
   };
 }
+
 class VirusChecker {
   private readonly apiKey: string;
   private readonly apiUrl = "https://www.virustotal.com/api/v3";
@@ -31,6 +33,8 @@ class VirusChecker {
     const response = (await request.json()) as IVTResponse;
 
     while (true) {
+      await new Promise((resolve) => setTimeout(resolve, 15000));
+
       const status = await fetch(
         this.apiUrl + `/analyses/${response.data.id}`,
         {
@@ -51,8 +55,6 @@ class VirusChecker {
       if (data.attributes.status === "completed") {
         return `Threats identified: ${malicious} out of ${total}.`;
       }
-
-      await new Promise((resolve) => setTimeout(resolve, 15000));
     }
   }
 }
