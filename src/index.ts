@@ -4,8 +4,10 @@ import { startUiServer } from "./ui-server.ts";
 import { startLaunchAgentMonitor } from "./launch-agent-monitor.ts";
 import { config } from "./config.ts";
 
-if (!config.vtApiKey) throw new Error("vtApiKey not set (config.json or VT_API_KEY)");
-if (!config.watchPath) throw new Error("watchPath not set (config.json or WATCH_PATH)");
+if (!config.vtApiKey)
+  throw new Error("vtApiKey not set (config.json or VT_API_KEY)");
+if (!config.watchPath)
+  throw new Error("watchPath not set (config.json or WATCH_PATH)");
 if (!config.quarantinePath)
   throw new Error("quarantinePath not set (config.json or QUARANTINE_PATH)");
 

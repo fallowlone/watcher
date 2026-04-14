@@ -55,12 +55,12 @@ Catches threats before they reach your system — with a native macOS menu bar a
 
 ## Requirements
 
-| Tool | Version |
-|------|---------|
-| Node.js | 20.6+ |
-| Rust / Cargo | 1.70+ |
-| macOS | 13 Ventura+ (menu bar app) |
-| VirusTotal API key | Free tier works |
+| Tool               | Version                    |
+| ------------------ | -------------------------- |
+| Node.js            | 20.6+                      |
+| Rust / Cargo       | 1.70+                      |
+| macOS              | 13 Ventura+ (menu bar app) |
+| VirusTotal API key | Free tier works            |
 
 ---
 
@@ -165,14 +165,14 @@ VT_CACHE_DB=/tmp/test.db vt-cache check /path/to/file
 
 ## Security model
 
-| Layer | Mechanism | Gap closed |
-|-------|-----------|-----------|
-| `chmod 0o000` | Blocks all access ~1–5ms after file appears | Accidental double-click, browser auto-open |
-| `com.apple.quarantine` xattr | Gatekeeper prompts before execution | Standard delivery vectors |
-| VirusTotal scan | 70+ AV engines | Known malware signatures |
-| Quarantine directory | 0o444 read-only, separate path | Lateral movement from quarantine |
-| LaunchAgent monitor | chokidar on `~/Library/LaunchAgents` | Persistence detection |
-| Endpoint Security daemon | Kernel `AUTH_EXEC` deny (optional) | Targeted execution bypass |
+| Layer                        | Mechanism                                   | Gap closed                                 |
+| ---------------------------- | ------------------------------------------- | ------------------------------------------ |
+| `chmod 0o000`                | Blocks all access ~1–5ms after file appears | Accidental double-click, browser auto-open |
+| `com.apple.quarantine` xattr | Gatekeeper prompts before execution         | Standard delivery vectors                  |
+| VirusTotal scan              | 70+ AV engines                              | Known malware signatures                   |
+| Quarantine directory         | 0o444 read-only, separate path              | Lateral movement from quarantine           |
+| LaunchAgent monitor          | chokidar on `~/Library/LaunchAgents`        | Persistence detection                      |
+| Endpoint Security daemon     | Kernel `AUTH_EXEC` deny (optional)          | Targeted execution bypass                  |
 
 ### Endpoint Security daemon (optional)
 

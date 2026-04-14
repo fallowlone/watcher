@@ -14,9 +14,7 @@ function run(args: string[]): Promise<string> {
  * Check the local SHA-256 cache before uploading to VirusTotal.
  * Returns the cached verdict string, or null on miss / binary not found.
  */
-export async function cacheCheck(
-  filePath: string,
-): Promise<string | null> {
+export async function cacheCheck(filePath: string): Promise<string | null> {
   try {
     const result = await run(["check", filePath]);
     return result === "miss" || result === "" ? null : result;
