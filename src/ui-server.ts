@@ -269,7 +269,11 @@ export function startUiServer(
       await deleteQuarantinedFile(id);
       res.json({ ok: true });
     } catch (e) {
-      res.status(400).json({ error: String(e) });
+      const msg = String(e);
+      const isConflict =
+        msg.includes("cannot be deleted") ||
+        msg.includes("not in quarantine_kept");
+      res.status(isConflict ? 409 : 400).json({ error: msg });
     }
   });
 

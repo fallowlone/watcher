@@ -138,13 +138,29 @@ export class JobStore {
       .get(jobId) as JobRow | undefined;
   }
 
-  setDeleted(jobId: string) {
+  setDeleted(jobId: string, detail = "Deleted by user") {
     const now = Date.now();
-    this.db
+    const result = this.db
       .prepare(
-        `UPDATE jobs SET status = 'deleted', detail = 'Deleted by user', updated_at = ? WHERE id = ? AND status = 'quarantine_kept'`,
+        `UPDATE jobs SET status = 'deleted', detail = ?, updated_at = ? WHERE id = ? AND status = 'quarantine_kept'`,
       )
-      .run(now, jobId);
+      .run(detail, now, jobId);
+    if (result.changes === 0) {
+      throw new Error(
+        `Job ${jobId} cannot be deleted: not in quarantine_kept status (may have been deleted or processed)`,
+      );
+    }
+  }
+
+  /** Inconclusive rows kept in quarantine with `created_at` before cutoff (ms epoch). */
+  listInconclusiveOlderThan(cutoffMs: number): JobRow[] {
+    return this.db
+      .prepare(
+        `SELECT id, source_path, original_name, quarantine_path, final_path, status, vt_verdict, detail, created_at, updated_at
+         FROM jobs
+         WHERE status = 'quarantine_kept' AND vt_verdict = 'inconclusive' AND created_at < ?`,
+      )
+      .all(cutoffMs) as JobRow[];
   }
 
   cancelJob(jobId: string) {
