@@ -3,6 +3,7 @@ import express, {
   type Response,
   type NextFunction,
 } from "express";
+import { resolve } from "path";
 import type { JobStore } from "./job-store.ts";
 import { config, writeConfig, maskSecret, type RawConfig } from "./config.ts";
 import { metrics } from "./metrics.ts";
@@ -34,31 +35,41 @@ function validatePaths(
   // Validate watchPath and quarantinePath
   for (const pathKey of ["watchPath", "quarantinePath"]) {
     if (pathKey in updates) {
-      const path = String(updates[pathKey]);
+      const rawPath = String(updates[pathKey]);
+      const resolvedPath = resolve(rawPath);
 
-      // Must be absolute
-      if (!path.startsWith("/")) {
+      // Must be absolute (after normalization)
+      if (!resolvedPath.startsWith("/")) {
         return `${pathKey} must be an absolute path`;
       }
 
       // Must not be / or under system directories
       if (
-        path === "/" ||
-        systemDirs.some((dir) => path === dir || path.startsWith(dir + "/"))
+        resolvedPath === "/" ||
+        systemDirs.some(
+          (dir) => resolvedPath === dir || resolvedPath.startsWith(dir + "/"),
+        )
       ) {
         return `${pathKey} cannot be / or under system directories (${systemDirs.join(", ")})`;
       }
+
+      // Update with resolved path
+      updates[pathKey] = resolvedPath;
     }
   }
 
   // Validate databasePath
   if ("databasePath" in updates) {
-    const path = String(updates.databasePath);
+    const rawPath = String(updates.databasePath);
+    const resolvedPath = resolve(rawPath);
 
     // Must end with .sqlite or .db
-    if (!path.endsWith(".sqlite") && !path.endsWith(".db")) {
+    if (!resolvedPath.endsWith(".sqlite") && !resolvedPath.endsWith(".db")) {
       return "databasePath must end with .sqlite or .db";
     }
+
+    // Update with resolved path
+    updates.databasePath = resolvedPath;
   }
 
   return null;
