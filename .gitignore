@@ -73,12 +73,29 @@ web_modules/
 # Yarn Integrity file
 .yarn-integrity
 
+# Local SQLite queue / UI data
+data/
+
+# Swift build artifacts
+macos-menubar/.build/
+macos-menubar/*.app
+macos-menubar/AppIcon.icns
+macos-menubar/AppIcon.iconset/
+
+# Rust build artifacts
+vt-cache/target/
+es-daemon/.build/
+
 # dotenv environment variable files
 .env
+
+# local config (copy config.example.json → config.json and fill in your keys)
+config.json
 .env.development.local
 .env.test.local
 .env.production.local
 .env.local
+.env.docker
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache

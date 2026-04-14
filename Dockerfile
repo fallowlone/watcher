@@ -4,9 +4,14 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 
-
-RUN npm install
+RUN npm ci
 
 COPY . .
 
-CMD [ "npm", "start" ]
+RUN chown -R node:node /app
+
+USER node
+
+ENV DATABASE_PATH=/data/jobs.sqlite
+
+CMD ["npm", "start"]

@@ -1,12 +1,34 @@
 import Watcher from "./watcher.ts";
-import ConfigManager from "./config-manager.ts";
+import { JobStore } from "./job-store.ts";
+import { startUiServer } from "./ui-server.ts";
+import { startLaunchAgentMonitor } from "./launch-agent-monitor.ts";
+import { config } from "./config.ts";
 
-const config = new ConfigManager();
-const { watchPath, quarantinePath } = config.getConfig();
+if (!config.vtApiKey) throw new Error("vtApiKey not set (config.json or VT_API_KEY)");
+if (!config.watchPath) throw new Error("watchPath not set (config.json or WATCH_PATH)");
+if (!config.quarantinePath)
+  throw new Error("quarantinePath not set (config.json or QUARANTINE_PATH)");
 
-const apiKey = process.env.VT_API_KEY;
-if (!apiKey) {
-  throw new Error("VT_API_KEY is not set");
+const jobStore = new JobStore(config.databasePath);
+
+const watcher = new Watcher(
+  config.watchPath,
+  [".DS_Store"],
+  config.quarantinePath,
+  config.vtApiKey,
+  jobStore,
+);
+watcher.start();
+startLaunchAgentMonitor();
+
+if (config.httpPort !== undefined) {
+  startUiServer(jobStore, config.httpPort, (id) => watcher.cancel(id));
 }
 
-new Watcher(watchPath, [".DS_Store"], quarantinePath, apiKey).start();
+function shutdown() {
+  jobStore.close();
+  process.exit(0);
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

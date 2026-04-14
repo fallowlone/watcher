@@ -1,8 +1,26 @@
-import { watch, type FSWatcher } from "chokidar";
+import { watch } from "chokidar";
+import { watch as fsWatch, chmod as fsChmod } from "fs";
+import { cacheCheck, cacheStore } from "./vt-cache.ts";
+import { chmod as chmodAsync } from "fs/promises";
+import { execFile } from "child_process";
+import { basename, join } from "path";
+import { randomUUID } from "crypto";
 import FileMover from "./file-mover.ts";
 import FilePermissions from "./file-permissions.ts";
-import { basename, join } from "path";
 import VirusChecker from "./virus-checker.ts";
+import type { JobStore } from "./job-store.ts";
+
+// Best-effort: set com.apple.quarantine xattr so Gatekeeper blocks execution
+// before the file enters the quarantine pipeline.
+function setQuarantineXattr(filePath: string): Promise<void> {
+  return new Promise((resolve) => {
+    execFile(
+      "xattr",
+      ["-w", "com.apple.quarantine", "0083;00000000;FileSandbox;", filePath],
+      () => resolve(),
+    );
+  });
+}
 
 class Watcher {
   private readonly watchPath: string;
@@ -11,12 +29,17 @@ class Watcher {
   private fileMover: FileMover;
   private quarantinePath: string;
   private virusChecker: VirusChecker;
+  private readonly jobStore?: JobStore;
+  // Paths currently being restored — skip re-scan of just-restored clean files.
+  private readonly restoringPaths = new Set<string>();
+  private readonly scanControllers = new Map<string, AbortController>();
 
   constructor(
     watchPath: string,
     ignored: string[],
     quarantinePath: string,
     apiKey: string,
+    jobStore?: JobStore,
   ) {
     this.quarantinePath = quarantinePath;
     this.watchPath = watchPath;
@@ -25,43 +48,157 @@ class Watcher {
     this.fileMover = new FileMover(this.quarantinePath);
     this.virusChecker = new VirusChecker(apiKey);
     this.filePermissions = new FilePermissions();
+    this.jobStore = jobStore;
+  }
+
+  cancel(jobId: string) {
+    const controller = this.scanControllers.get(jobId);
+    if (controller) {
+      controller.abort();
+      this.scanControllers.delete(jobId);
+    }
   }
 
   start() {
+    const stabilityThreshold = Number(process.env.WATCH_STABILITY_MS) || 2000;
+    const pollInterval = Number(process.env.WATCH_POLL_MS) || 100;
+
+    // fs.watch uses kqueue/FSEvents directly (~1–5ms vs chokidar's ~10ms).
+    // Fires immediately on file appearance — no awaitWriteFinish delay.
+    // Two-step lockdown: chmod 0o000 (no access for anyone) + quarantine xattr.
+    // chmod 0o000 blocks execution AND reading before any other process can act.
+    const rawFsWatcher = fsWatch(
+      this.watchPath,
+      { recursive: false },
+      (event, filename) => {
+        if (!filename || event !== "rename") return;
+        if ((this.ignored as string[]).some((ign) => filename.endsWith(ign)))
+          return;
+        const fullPath = join(this.watchPath, filename);
+        if (this.restoringPaths.has(fullPath)) return;
+        fsChmod(fullPath, 0o000, () => {}); // fire-and-forget; ENOENT on delete events is silently ignored
+        setQuarantineXattr(fullPath).catch(() => {});
+      },
+    );
+
     const watcher = watch(this.watchPath, {
       ignoreInitial: true,
       ignored: this.ignored,
+      awaitWriteFinish: {
+        stabilityThreshold,
+        pollInterval,
+      },
     });
 
-    watcher.on("add", async (filepath, stats) => {
-      const fileName = basename(filepath);
+    watcher.on("add", async (filepath) => {
+      if (this.restoringPaths.has(filepath)) {
+        this.restoringPaths.delete(filepath);
+        return;
+      }
+
+      // Belt-and-suspenders: ensure quarantine xattr is set even if raw
+      // watcher missed the event (e.g. file appeared during startup).
+      await setQuarantineXattr(filepath);
+
+      const jobId = randomUUID();
+      this.jobStore?.insertReceived(jobId, filepath, basename(filepath));
 
       try {
-        await this.fileMover.move(filepath);
+        // Unlock to read-only so FileMover can copy to quarantine.
+        // Was 0o000 from raw watcher lockdown — still no exec permission.
+        await chmodAsync(filepath, 0o444).catch(() => {});
 
-        await this.filePermissions.changePermissions(
-          join(this.quarantinePath, fileName),
-          0o444,
+        const { quarantineFilePath, originalBaseName } =
+          await this.fileMover.move(filepath);
+
+        this.jobStore?.setInQuarantine(jobId, quarantineFilePath);
+
+        await this.filePermissions.changePermissions(quarantineFilePath, 0o444);
+
+        console.log(
+          `Watching: path=${filepath} quarantine=${quarantineFilePath} originalName=${originalBaseName}`,
         );
 
-        console.log(`
-      Path: ${filepath}
-      Filename: ${fileName}`);
+        this.jobStore?.setScanning(jobId);
 
+        // SHA-256 cache hit → skip VT upload entirely
+        const cached = await cacheCheck(quarantineFilePath);
+        if (cached) {
+          console.log(`vt-cache hit: ${cached} (skipped upload)`);
+          const result = {
+            verdict: cached as import("./virus-checker.ts").VirusVerdict,
+            message: `From local cache (SHA-256 match)`,
+          };
+          this.jobStore?.setScanResult(jobId, result);
+          if (result.verdict === "clean") {
+            const destPath = await this.fileMover.resolveRestoreDestination(
+              this.watchPath,
+              originalBaseName,
+            );
+            this.restoringPaths.add(destPath);
+            const { restoredPath } = await this.fileMover.restoreToWatch(
+              this.watchPath,
+              quarantineFilePath,
+              originalBaseName,
+            );
+            this.jobStore?.setRestored(jobId, restoredPath);
+          }
+          return;
+        }
+
+        const controller = new AbortController();
+        this.scanControllers.set(jobId, controller);
         const result = await this.virusChecker.check(
-          join(this.quarantinePath, fileName),
+          quarantineFilePath,
+          controller.signal,
         );
+        this.scanControllers.delete(jobId);
 
-        console.log(result);
+        if (result.verdict !== "inconclusive") {
+          await cacheStore(quarantineFilePath, result.verdict);
+        }
+        console.log(`VirusTotal: ${result.verdict} — ${result.message}`);
+
+        if (result.message === "Cancelled by user") {
+          this.jobStore?.cancelJob(jobId);
+          console.log(
+            `Scan cancelled — keeping in quarantine: ${quarantineFilePath}`,
+          );
+          return;
+        }
+
+        this.jobStore?.setScanResult(jobId, result);
+
+        if (result.verdict === "clean") {
+          // Resolve destination before copying so we can register it in
+          // restoringPaths before chokidar sees the new file appear.
+          const destPath = await this.fileMover.resolveRestoreDestination(
+            this.watchPath,
+            originalBaseName,
+          );
+          this.restoringPaths.add(destPath);
+
+          const { restoredPath } = await this.fileMover.restoreToWatch(
+            this.watchPath,
+            quarantineFilePath,
+            originalBaseName,
+          );
+          this.jobStore?.setRestored(jobId, restoredPath);
+        } else {
+          console.log(
+            `Keeping in quarantine (${result.verdict}): ${quarantineFilePath}`,
+          );
+        }
       } catch (error) {
-        console.log(`Failed to move ${filepath} to quarantine: ${error}`);
+        console.log(`Failed processing ${filepath}: ${error}`);
+        this.jobStore?.fail(jobId, String(error));
       }
     });
     watcher.on("error", (error) => {
       console.log(`Watcher error: ${error}`);
     });
 
-    return watcher;
+    return { watcher, rawFsWatcher };
   }
 }
 

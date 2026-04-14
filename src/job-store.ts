@@ -1,0 +1,147 @@
+import Database from "better-sqlite3";
+import { mkdirSync } from "fs";
+import { dirname } from "path";
+import type { VirusCheckResult, VirusVerdict } from "./virus-checker.ts";
+
+export type JobStatus =
+  | "received"
+  | "in_quarantine"
+  | "scanning"
+  | "restored"
+  | "quarantine_kept"
+  | "cancelled"
+  | "failed";
+
+export type JobRow = {
+  id: string;
+  source_path: string;
+  original_name: string;
+  quarantine_path: string | null;
+  final_path: string | null;
+  status: JobStatus;
+  vt_verdict: VirusVerdict | null;
+  detail: string | null;
+  created_at: number;
+  updated_at: number;
+};
+
+export class JobStore {
+  private readonly db: Database.Database;
+
+  constructor(dbPath: string) {
+    mkdirSync(dirname(dbPath), { recursive: true });
+    this.db = new Database(dbPath);
+    this.db.pragma("journal_mode = WAL");
+    this.db
+      .prepare(
+        `CREATE TABLE IF NOT EXISTS jobs (
+        id TEXT PRIMARY KEY NOT NULL,
+        source_path TEXT NOT NULL,
+        original_name TEXT NOT NULL,
+        quarantine_path TEXT,
+        final_path TEXT,
+        status TEXT NOT NULL,
+        vt_verdict TEXT,
+        detail TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`,
+      )
+      .run();
+    this.db
+      .prepare(
+        `CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs (created_at DESC)`,
+      )
+      .run();
+  }
+
+  insertReceived(jobId: string, sourcePath: string, originalName: string) {
+    const now = Date.now();
+    this.db
+      .prepare(
+        `INSERT INTO jobs (id, source_path, original_name, quarantine_path, final_path, status, vt_verdict, detail, created_at, updated_at)
+         VALUES (?, ?, ?, NULL, NULL, 'received', NULL, NULL, ?, ?)`,
+      )
+      .run(jobId, sourcePath, originalName, now, now);
+  }
+
+  setInQuarantine(jobId: string, quarantinePath: string) {
+    const now = Date.now();
+    this.db
+      .prepare(
+        `UPDATE jobs SET quarantine_path = ?, status = 'in_quarantine', updated_at = ? WHERE id = ?`,
+      )
+      .run(quarantinePath, now, jobId);
+  }
+
+  setScanning(jobId: string) {
+    const now = Date.now();
+    this.db
+      .prepare(
+        `UPDATE jobs SET status = 'scanning', updated_at = ? WHERE id = ?`,
+      )
+      .run(now, jobId);
+  }
+
+  setScanResult(jobId: string, result: VirusCheckResult) {
+    const now = Date.now();
+    if (result.verdict === "clean") {
+      this.db
+        .prepare(
+          `UPDATE jobs SET vt_verdict = ?, detail = ?, updated_at = ? WHERE id = ?`,
+        )
+        .run(result.verdict, result.message, now, jobId);
+    } else {
+      this.db
+        .prepare(
+          `UPDATE jobs SET vt_verdict = ?, detail = ?, status = 'quarantine_kept', updated_at = ? WHERE id = ?`,
+        )
+        .run(result.verdict, result.message, now, jobId);
+    }
+  }
+
+  setRestored(jobId: string, finalPath: string) {
+    const now = Date.now();
+    this.db
+      .prepare(
+        `UPDATE jobs SET final_path = ?, status = 'restored', updated_at = ? WHERE id = ?`,
+      )
+      .run(finalPath, now, jobId);
+  }
+
+  fail(jobId: string, message: string) {
+    const now = Date.now();
+    this.db
+      .prepare(
+        `UPDATE jobs SET status = 'failed', detail = ?, updated_at = ? WHERE id = ?`,
+      )
+      .run(message, now, jobId);
+  }
+
+  listRecent(limit = 100): JobRow[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, source_path, original_name, quarantine_path, final_path, status, vt_verdict, detail, created_at, updated_at
+         FROM jobs ORDER BY created_at DESC LIMIT ?`,
+      )
+      .all(limit) as JobRow[];
+    return rows;
+  }
+
+  cancelJob(jobId: string) {
+    const now = Date.now();
+    this.db
+      .prepare(
+        `UPDATE jobs SET status = 'cancelled', detail = 'Cancelled by user', updated_at = ? WHERE id = ? AND status = 'scanning'`,
+      )
+      .run(now, jobId);
+  }
+
+  clearAll() {
+    this.db.prepare(`DELETE FROM jobs`).run();
+  }
+
+  close() {
+    this.db.close();
+  }
+}

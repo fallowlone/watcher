@@ -1,20 +1,24 @@
 {
   "name": "watcher",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "",
   "type": "module",
   "main": "index.js",
   "types": "index.d.ts",
   "scripts": {
-    "start": "node --env-file=.env src/index.ts"
+    "start": "node src/index.ts",
+    "start:local": "node --env-file=.env src/index.ts"
   },
   "keywords": [],
-  "author": "Artem Hrechuk <hrechuk.artem@gmail.com>",
-  "license": "MIT",
+  "author": "artem hrechuk <hrechuk.artem@gmail.com>",
+  "license": "mit",
   "dependencies": {
-    "chokidar": "5.0.0"
+    "better-sqlite3": "^11.8.1",
+    "chokidar": "5.0.0",
+    "express": "^4.21.2"
   },
   "devDependencies": {
+    "@types/express": "^4.17.21",
     "@types/node": "25.5.0",
     "typescript": "5.2.2"
   }
