@@ -237,7 +237,11 @@ export function virusCheckInChildProcess(
     const pollMs = Number(process.env.VT_POLL_INTERVAL_MS) || 15000;
     const timeoutMs = maxPolls * pollMs + 60_000;
 
+    let settled = false;
+
     const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
       child.kill();
       resolve({
         verdict: "inconclusive",
@@ -246,7 +250,15 @@ export function virusCheckInChildProcess(
     }, timeoutMs);
 
     const onAbort = () => {
+      if (settled) return;
+      settled = true;
       child.kill("SIGTERM");
+      clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", onAbort);
+      resolve({
+        verdict: "inconclusive",
+        message: "Cancelled by user",
+      });
     };
     signal?.addEventListener("abort", onAbort);
 
@@ -258,7 +270,19 @@ export function virusCheckInChildProcess(
     child.stderr?.on("data", (d: Buffer) => {
       err += d.toString();
     });
+    child.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", onAbort);
+      resolve({
+        verdict: "inconclusive",
+        message: `VT child spawn failed: ${err.message}`,
+      });
+    });
     child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timeoutId);
       signal?.removeEventListener("abort", onAbort);
       try {
