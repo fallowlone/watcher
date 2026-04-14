@@ -1,12 +1,21 @@
 import Foundation
 
+private let bytesPerMiB = 1_048_576
+
 struct DaemonConfig: Codable {
     var vtApiKey: String
+    var apiToken: String?
     var watchPath: String
     var quarantinePath: String
     var databasePath: String
     var httpPort: String
     var httpHost: String
+    var watchRecursive: Bool?
+    var maxScanBytes: Int?
+    var maxConcurrentScans: Int?
+    var useSeparateVtProcess: Bool?
+    var inconclusiveRetentionDays: Int?
+    var configEncryptedAtRest: Bool?
 }
 
 class SettingsStore: ObservableObject {
@@ -16,23 +25,46 @@ class SettingsStore: ObservableObject {
     @Published var databasePath: String = ""
     @Published var httpPort: String = ""
     @Published var httpHost: String = ""
+    /// Same value the daemon expects in Authorization: Bearer (optional).
+    @Published var apiAuthToken: String = ""
+    @Published var watchRecursive: Bool = true
+    /// VirusTotal upload limit, shown/edited as MiB in the UI; saved as bytes.
+    @Published var maxScanMegabytes: Int = 400
+    @Published var maxConcurrentScans: Int = 2
+    @Published var useSeparateVtProcess: Bool = false
+    @Published var inconclusiveRetentionDays: Int = 0
 
     @Published var isLoading = false
     @Published var isSaving = false
-    @Published var saveResult: String? = nil   // nil = idle, "ok" = success, "err:…" = error
+    @Published var saveResult: String? = nil
     @Published var loadError: String? = nil
 
     private let port: String
 
     init() {
         self.port = ProcessInfo.processInfo.environment["FILE_SANDBOX_PORT"] ?? "3847"
+        self.apiAuthToken = ClientAuthStorage.token
+    }
+
+    private func authorizedConfigRequest(url: URL) -> URLRequest {
+        var request = URLRequest(url: url)
+        let t = ClientAuthStorage.token
+        if !t.isEmpty {
+            request.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization")
+        }
+        return request
+    }
+
+    private static func megabytesFromBytes(_ bytes: Int) -> Int {
+        max(1, bytes / bytesPerMiB)
     }
 
     func fetch() {
         guard let url = URL(string: "http://127.0.0.1:\(port)/api/config") else { return }
         isLoading = true
         loadError = nil
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, error in
+        let request = authorizedConfigRequest(url: url)
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.isLoading = false
@@ -48,6 +80,19 @@ class SettingsStore: ObservableObject {
                 self.databasePath = decoded.databasePath
                 self.httpPort = decoded.httpPort
                 self.httpHost = decoded.httpHost
+                self.watchRecursive = decoded.watchRecursive ?? true
+                if let b = decoded.maxScanBytes, b > 0 {
+                    self.maxScanMegabytes = Self.megabytesFromBytes(b)
+                } else {
+                    self.maxScanMegabytes = 400
+                }
+                if let m = decoded.maxConcurrentScans, m >= 1 {
+                    self.maxConcurrentScans = m
+                } else {
+                    self.maxConcurrentScans = 2
+                }
+                self.useSeparateVtProcess = decoded.useSeparateVtProcess ?? false
+                self.inconclusiveRetentionDays = decoded.inconclusiveRetentionDays ?? 0
             }
         }.resume()
     }
@@ -57,21 +102,31 @@ class SettingsStore: ObservableObject {
         isSaving = true
         saveResult = nil
 
-        let body: [String: String] = [
-            "vtApiKey": vtApiKey,
+        ClientAuthStorage.token = apiAuthToken
+
+        let scanBytes = maxScanMegabytes * bytesPerMiB
+
+        var body: [String: Any] = [
             "watchPath": watchPath,
             "quarantinePath": quarantinePath,
             "databasePath": databasePath,
             "httpPort": httpPort,
             "httpHost": httpHost,
+            "watchRecursive": watchRecursive,
+            "useSeparateVtProcess": useSeparateVtProcess,
+            "apiToken": apiAuthToken,
+            "maxScanBytes": scanBytes,
+            "maxConcurrentScans": maxConcurrentScans,
+            "inconclusiveRetentionDays": inconclusiveRetentionDays,
         ]
+        if !vtApiKey.isEmpty { body["vtApiKey"] = vtApiKey }
 
-        var request = URLRequest(url: url)
+        var request = authorizedConfigRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONEncoder().encode(body)
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
-        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+        URLSession.shared.dataTask(with: request) { [weak self] _, _, error in
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.isSaving = false
@@ -80,7 +135,6 @@ class SettingsStore: ObservableObject {
                     return
                 }
                 self.saveResult = "ok"
-                // Auto-clear success banner after 3s
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                     if self.saveResult == "ok" { self.saveResult = nil }
                 }

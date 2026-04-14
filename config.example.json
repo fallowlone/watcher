@@ -1,8 +1,14 @@
 {
   "vtApiKey": "YOUR_VIRUSTOTAL_API_KEY",
+  "apiToken": "",
   "watchPath": "/Users/YOUR_USERNAME/Downloads",
   "quarantinePath": "/Users/YOUR_USERNAME/.file-sandbox/quarantine",
   "databasePath": "/Users/YOUR_USERNAME/.file-sandbox/jobs.sqlite",
   "httpPort": 3847,
-  "httpHost": "127.0.0.1"
+  "httpHost": "127.0.0.1",
+  "watchRecursive": true,
+  "maxScanBytes": 419430400,
+  "maxConcurrentScans": 2,
+  "useSeparateVtProcess": false,
+  "inconclusiveRetentionDays": 0
 }

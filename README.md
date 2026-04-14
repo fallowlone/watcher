@@ -88,19 +88,37 @@ Copy the example config and fill in your details:
 cp config.example.json config.json
 ```
 
+Full template (same as `config.example.json`):
+
 ```json
 {
   "vtApiKey": "YOUR_VIRUSTOTAL_API_KEY",
+  "apiToken": "",
   "watchPath": "/Users/yourname/Downloads",
   "quarantinePath": "/Users/yourname/.file-sandbox/quarantine",
   "databasePath": "/Users/yourname/.file-sandbox/jobs.sqlite",
-  "httpPort": 3847
+  "httpPort": 3847,
+  "httpHost": "127.0.0.1",
+  "watchRecursive": true,
+  "maxScanBytes": 419430400,
+  "maxConcurrentScans": 2,
+  "useSeparateVtProcess": false,
+  "inconclusiveRetentionDays": 0
 }
 ```
 
+| Field                       | Meaning                                                                                                    |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `apiToken`                  | If non-empty, HTTP API requires `Authorization: Bearer …` or `X-Filesandbox-Token` (except `/api/health`). |
+| `watchRecursive`            | Watch subfolders (`false` = only direct children of `watchPath`).                                          |
+| `maxScanBytes`              | Skip VT upload above this size; file stays quarantined as oversized (default 400 MiB).                     |
+| `maxConcurrentScans`        | Parallel VT pipelines (minimum 1).                                                                         |
+| `useSeparateVtProcess`      | Run VT upload/analysis in a child Node process.                                                            |
+| `inconclusiveRetentionDays` | `0` = never auto-delete inconclusive quarantine; `N` = hourly sweep deletes after N days.                  |
+
 Get a free VirusTotal API key at [virustotal.com](https://www.virustotal.com/gui/join-us).
 
-> **env fallback** — all fields also read from environment variables (`VT_API_KEY`, `WATCH_PATH`, etc.) for Docker / CI use.
+> **env fallback** — Docker / CI can override: `VT_API_KEY`, `FILESANDBOX_API_TOKEN`, `WATCH_PATH`, `QUARANTINE_PATH`, `DATABASE_PATH`, `HTTP_PORT`, `HTTP_HOST`, `WATCH_RECURSIVE`, `MAX_SCAN_BYTES`, `MAX_CONCURRENT_SCANS`, `USE_SEPARATE_VT_PROCESS`, `INCONCLUSIVE_RETENTION_DAYS`. Optional: `FILESANDBOX_MASTER_KEY` (encrypt `config.json` at rest), `FILESANDBOX_ALLOW_LAN=1` (allow binding `httpHost` to non-loopback).
 
 ---
 
@@ -131,10 +149,15 @@ bash scripts/uninstall-launchagent.sh
 
 ### Menu bar app
 
+Rebuild after pulling (bundles your current Swift sources):
+
 ```bash
+cd macos-menubar && bash build.sh && cd ..
 open macos-menubar/FileSandboxMenuBar.app
-# or set FILE_SANDBOX_PORT env var if using a non-default port
 ```
+
+Settings has two tabs: **General** (paths, network, `apiToken`, VT key) and **Watch & scan** (`watchRecursive`, limits, child process, inconclusive retention).  
+Use env `FILE_SANDBOX_PORT` if the daemon HTTP port is not `3847`.
 
 ### Docker
 

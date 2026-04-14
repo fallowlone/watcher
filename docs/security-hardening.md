@@ -35,5 +35,7 @@ If the **ingest** container has `--network none`, it cannot talk to VT. Use **sp
 ## UI / DB / queue
 
 - SQLite (`DATABASE_PATH`) is the **durable job log** for the UI and ops.
-- Bind UI to **localhost** or behind reverse proxy with auth if exposed.
-- Do not expose VT API keys in the UI or client-side code.
+- Bind UI to **localhost** (`httpHost` / `HTTP_HOST`). Binding to `0.0.0.0` or another non-loopback address requires **`FILESANDBOX_ALLOW_LAN=1`** (explicit opt-in).
+- Set **`apiToken`** in `config.json` or **`FILESANDBOX_API_TOKEN`** so clients must send `Authorization: Bearer …` or `X-Filesandbox-Token` (health endpoints stay public).
+- Optional **`FILESANDBOX_MASTER_KEY`**: encrypts `config.json` at rest (AES-256-GCM). SQLite is still a plain file unless you add SQLCipher or OS-level encryption.
+- Do not expose VT API keys in the UI or client-side code; the daemon masks them in `GET /api/config`.
