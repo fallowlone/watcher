@@ -29,9 +29,13 @@ class JobStore: ObservableObject {
         startPolling()
     }
 
+    var activeThreats: [SandboxJob] {
+        jobs.filter { $0.vt_verdict == "infected" && $0.status == "quarantine_kept" }
+    }
+
     var iconName: String {
         guard isConnected else { return "shield.slash" }
-        if jobs.contains(where: { $0.vt_verdict == "infected" }) {
+        if !activeThreats.isEmpty {
             return "exclamationmark.shield.fill"
         }
         if jobs.contains(where: { $0.status == "scanning" || $0.status == "in_quarantine" }) {
@@ -40,9 +44,7 @@ class JobStore: ObservableObject {
         return "checkmark.shield.fill"
     }
 
-    var threatCount: Int {
-        jobs.filter { $0.vt_verdict == "infected" }.count
-    }
+    var threatCount: Int { activeThreats.count }
 
     func startPolling() {
         fetch()
@@ -63,6 +65,15 @@ class JobStore: ObservableObject {
         guard let url = URL(string: "http://127.0.0.1:\(port)/api/jobs/\(id)/cancel") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        URLSession.shared.dataTask(with: request) { [weak self] _, _, _ in
+            DispatchQueue.main.async { self?.fetch() }
+        }.resume()
+    }
+
+    func deleteFile(_ id: String) {
+        guard let url = URL(string: "http://127.0.0.1:\(port)/api/jobs/\(id)/quarantine") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
         URLSession.shared.dataTask(with: request) { [weak self] _, _, _ in
             DispatchQueue.main.async { self?.fetch() }
         }.resume()

@@ -1,8 +1,10 @@
 import SwiftUI
+import AppKit
 
 struct JobRowView: View {
     let job: SandboxJob
     let onCancel: () -> Void
+    let onDelete: () -> Void
 
     var statusIcon: (name: String, color: Color) {
         switch job.status {
@@ -20,6 +22,7 @@ struct JobRowView: View {
         switch job.status {
         case "restored":        return "Clean"
         case "quarantine_kept": return "Infected — quarantined"
+        case "deleted":         return "Deleted"
         case "cancelled":       return "Cancelled"
         case "scanning":        return "Scanning…"
         case "in_quarantine":   return "In quarantine"
@@ -68,15 +71,34 @@ struct JobRowView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Cancel scan — keep file in sandbox")
+            } else if job.status == "deleted" {
+                // nothing — file gone
+            } else if job.status == "quarantine_kept" {
+                HStack(spacing: 6) {
+                    if let verdict = job.vt_verdict {
+                        Text(verdict)
+                            .font(.system(size: 10, weight: .semibold))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.red.opacity(0.15))
+                            .foregroundColor(.red)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                    }
+                    Button(action: onDelete) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 12))
+                            .foregroundColor(.red.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Permanently delete quarantined file")
+                }
             } else if let verdict = job.vt_verdict {
                 Text(verdict)
                     .font(.system(size: 10, weight: .semibold))
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
-                    .background(verdict == "clean"
-                        ? Color.green.opacity(0.15)
-                        : Color.red.opacity(0.15))
-                    .foregroundColor(verdict == "clean" ? .green : .red)
+                    .background(Color.green.opacity(0.15))
+                    .foregroundColor(.green)
                     .clipShape(RoundedRectangle(cornerRadius: 4))
             }
         }
@@ -109,7 +131,7 @@ struct JobRowView: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .onAppear { startAnimations() }
-        .onChange(of: isScanning) { scanning in
+        .onChange(of: isScanning) { _, scanning in
             if scanning { startAnimations() }
         }
     }
@@ -127,6 +149,8 @@ struct JobRowView: View {
 
 struct MenuBarContentView: View {
     @ObservedObject var store: JobStore
+    @ObservedObject var settingsStore: SettingsStore
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(spacing: 0) {
@@ -137,6 +161,11 @@ struct MenuBarContentView: View {
             footer
         }
         .frame(width: 420)
+        .onAppear {
+            DispatchQueue.main.async {
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
     }
 
     private var header: some View {
@@ -167,6 +196,16 @@ struct MenuBarContentView: View {
                 .foregroundColor(.secondary)
                 .help("Clear all logs")
             }
+            Button(action: {
+                openSettings()
+                NSApp.activate(ignoringOtherApps: true)
+            }) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(.plain)
+            .foregroundColor(.secondary)
+            .help("Settings")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -201,7 +240,7 @@ struct MenuBarContentView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     ForEach(visible) { job in
-                        JobRowView(job: job, onCancel: { store.cancelJob(job.id) })
+                        JobRowView(job: job, onCancel: { store.cancelJob(job.id) }, onDelete: { store.deleteFile(job.id) })
                         if job.id != visible.last?.id {
                             Divider().padding(.leading, 42)
                         }

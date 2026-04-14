@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
 interface RawConfig {
@@ -10,8 +10,9 @@ interface RawConfig {
   httpHost?: string;
 }
 
+const configPath = join(process.cwd(), "config.json");
+
 function load(): RawConfig {
-  const configPath = join(process.cwd(), "config.json");
   try {
     const raw = readFileSync(configPath, "utf8");
     return JSON.parse(raw) as RawConfig;
@@ -24,6 +25,15 @@ const file = load();
 
 function get(fileVal: string | undefined, envVal: string | undefined): string {
   return fileVal ?? envVal ?? "";
+}
+
+export function writeConfig(updates: Partial<RawConfig>): void {
+  let existing: RawConfig = {};
+  try {
+    existing = JSON.parse(readFileSync(configPath, "utf8")) as RawConfig;
+  } catch {}
+  const merged = { ...existing, ...updates };
+  writeFileSync(configPath, JSON.stringify(merged, null, 2), "utf8");
 }
 
 export const config = {

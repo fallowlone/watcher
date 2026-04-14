@@ -1,5 +1,7 @@
 # Security hardening (macOS Seatbelt, Linux seccomp, egress, split)
 
+Threat-model gaps the app does **not** mitigate (same-UID trust, HTTP surface, VT limits, races, etc.) are summarized in [security-gaps.md](security-gaps.md) (RU).
+
 ## Conflict: strict isolation vs VirusTotal
 
 Process that **uploads bytes to VirusTotal needs outbound HTTPS**. A container or process with **literally no egress** cannot call the VT API from the same runtime. Practical patterns:

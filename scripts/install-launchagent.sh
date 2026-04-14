@@ -23,7 +23,7 @@ fi
 NODE_VERSION=$("$NODE_PATH" --version)
 NODE_MAJOR=$(echo "$NODE_VERSION" | sed 's/v\([0-9]*\).*/\1/')
 if [ "$NODE_MAJOR" -lt 20 ]; then
-  echo "Error: Node.js 20+ required for --env-file flag (found $NODE_VERSION)."
+  echo "Error: Node.js 20+ required (found $NODE_VERSION)."
   exit 1
 fi
 
@@ -47,7 +47,6 @@ cat > "$PLIST" << EOF
     <key>ProgramArguments</key>
     <array>
         <string>$NODE_PATH</string>
-        <string>--env-file=.env</string>
         <string>src/index.ts</string>
     </array>
     <key>WorkingDirectory</key>
@@ -77,6 +76,7 @@ launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || \
 
 if launchctl bootstrap "gui/$(id -u)" "$PLIST" 2>/dev/null; then
   echo "Loaded via bootstrap (macOS 12+)"
+  launchctl kickstart "gui/$(id -u)/$LABEL" 2>/dev/null || true
 elif launchctl load "$PLIST"; then
   echo "Loaded via launchctl load"
 else

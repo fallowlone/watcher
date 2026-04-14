@@ -86,6 +86,15 @@ class FileMover {
     );
   }
 
+  async deleteFile(quarantineFilePath: string): Promise<void> {
+    try {
+      await unlink(quarantineFilePath);
+      console.log(`Deleted quarantined file: ${quarantineFilePath}`);
+    } catch {
+      throw new Error(`Failed to delete ${quarantineFilePath}`);
+    }
+  }
+
   async ensureDirectory() {
     await mkdir(this.destination, {
       recursive: true,

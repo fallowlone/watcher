@@ -9,6 +9,7 @@ export type JobStatus =
   | "scanning"
   | "restored"
   | "quarantine_kept"
+  | "deleted"
   | "cancelled"
   | "failed";
 
@@ -126,6 +127,24 @@ export class JobStore {
       )
       .all(limit) as JobRow[];
     return rows;
+  }
+
+  getJob(jobId: string): JobRow | undefined {
+    return this.db
+      .prepare(
+        `SELECT id, source_path, original_name, quarantine_path, final_path, status, vt_verdict, detail, created_at, updated_at
+         FROM jobs WHERE id = ?`,
+      )
+      .get(jobId) as JobRow | undefined;
+  }
+
+  setDeleted(jobId: string) {
+    const now = Date.now();
+    this.db
+      .prepare(
+        `UPDATE jobs SET status = 'deleted', detail = 'Deleted by user', updated_at = ? WHERE id = ? AND status = 'quarantine_kept'`,
+      )
+      .run(now, jobId);
   }
 
   cancelJob(jobId: string) {

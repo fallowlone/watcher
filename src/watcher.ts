@@ -22,6 +22,16 @@ function setQuarantineXattr(filePath: string): Promise<void> {
   });
 }
 
+// Browser incomplete-download temp extensions — never process these, only the
+// final renamed file that appears after the download completes.
+const BROWSER_TEMP_EXTENSIONS = [
+  ".crdownload", // Chrome
+  ".download", // Safari
+  ".part", // Firefox
+  ".opdownload", // Opera
+  ".tmp", // generic
+];
+
 class Watcher {
   private readonly watchPath: string;
   private readonly ignored: string[];
@@ -67,6 +77,9 @@ class Watcher {
     // Fires immediately on file appearance — no awaitWriteFinish delay.
     // Two-step lockdown: chmod 0o000 (no access for anyone) + quarantine xattr.
     // chmod 0o000 blocks execution AND reading before any other process can act.
+    const isBrowserTemp = (filename: string) =>
+      BROWSER_TEMP_EXTENSIONS.some((ext) => filename.endsWith(ext));
+
     const rawFsWatcher = fsWatch(
       this.watchPath,
       { recursive: false },
@@ -74,6 +87,7 @@ class Watcher {
         if (!filename || event !== "rename") return;
         if ((this.ignored as string[]).some((ign) => filename.endsWith(ign)))
           return;
+        if (isBrowserTemp(filename)) return;
         const fullPath = join(this.watchPath, filename);
         if (this.restoringPaths.has(fullPath)) return;
         fsChmod(fullPath, 0o000, () => {}); // fire-and-forget; ENOENT on delete events is silently ignored
@@ -83,14 +97,30 @@ class Watcher {
 
     const watcher = watch(this.watchPath, {
       ignoreInitial: true,
-      ignored: this.ignored,
+      // Raw lockdown uses chmod 0o000 (no owner read bit). Chokidar's directory scan
+      // drops files that fail _hasReadPermissions (requires mode & 0o400), so without
+      // this flag "add" never fires and only the rename handler runs (chmod + xattr).
+      ignorePermissionErrors: true,
+      // Use a function so full paths are matched correctly (micromatch bare strings
+      // don't match against full paths like /Users/.../Downloads/.DS_Store).
+      ignored: (f: string) => this.ignored.some((ign) => f.endsWith(ign)),
       awaitWriteFinish: {
         stabilityThreshold,
         pollInterval,
       },
     });
 
-    watcher.on("add", async (filepath) => {
+    const handleFile = async (filepath: string) => {
+      // Skip browser temp download files — chokidar still tracks them so that
+      // FSEvents correctly fires "add" for the final renamed path, but we don't
+      // quarantine the in-progress temp file itself.
+      if (isBrowserTemp(filepath)) return;
+
+      // Belt-and-suspenders: chokidar v5's function-based ignored is not always
+      // applied before the event fires (observed with .DS_Store on macOS FSEvents).
+      const fname = basename(filepath);
+      if (this.ignored.some((ign) => fname === ign)) return;
+
       if (this.restoringPaths.has(filepath)) {
         this.restoringPaths.delete(filepath);
         return;
@@ -193,7 +223,10 @@ class Watcher {
         console.log(`Failed processing ${filepath}: ${error}`);
         this.jobStore?.fail(jobId, String(error));
       }
-    });
+    };
+
+    watcher.on("add", handleFile);
+    watcher.on("change", handleFile);
     watcher.on("error", (error) => {
       console.log(`Watcher error: ${error}`);
     });
