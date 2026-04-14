@@ -169,7 +169,12 @@ class JobStore: ObservableObject {
                 }
                 self.isConnected = true
                 self.jobs = decoded.jobs
+                self.lastActionError = nil
             }
         }.resume()
+    }
+
+    deinit {
+        timer?.invalidate()
     }
 }
