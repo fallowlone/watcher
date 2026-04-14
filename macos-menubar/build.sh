@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -e
+cd "$(dirname "$0")"
+
+# ── Icon ──────────────────────────────────────────────────────────────────────
+if [ ! -f "AppIcon.icns" ]; then
+  echo "Generating AppIcon.icns..."
+  swift create-icon.swift
+fi
+
+# ── Swift build ───────────────────────────────────────────────────────────────
+echo "Building FileSandboxMenuBar..."
+swift build -c release
+
+BINARY=".build/release/FileSandboxMenuBar"
+APP="FileSandboxMenuBar.app"
+MACOS_DIR="$APP/Contents/MacOS"
+RESOURCES_DIR="$APP/Contents/Resources"
+
+rm -rf "$APP"
+mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
+cp "$BINARY" "$MACOS_DIR/FileSandboxMenuBar"
+cp "AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+
+cat > "$APP/Contents/Info.plist" << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>FileSandboxMenuBar</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIdentifier</key>
+    <string>dev.artemmac.filesandbox-menubar</string>
+    <key>CFBundleName</key>
+    <string>FileSandboxMenuBar</string>
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+</dict>
+</plist>
+EOF
+
+echo "Done: $(pwd)/$APP"
+echo "Run: open \"$(pwd)/$APP\""
