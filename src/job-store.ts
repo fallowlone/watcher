@@ -3,6 +3,13 @@ import { mkdirSync } from "fs";
 import { dirname } from "path";
 import type { VirusCheckResult, VirusVerdict } from "./virus-checker.ts";
 
+export class JobConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "JobConflictError";
+  }
+}
+
 export type JobStatus =
   | "received"
   | "in_quarantine"
@@ -146,7 +153,7 @@ export class JobStore {
       )
       .run(detail, now, jobId);
     if (result.changes === 0) {
-      throw new Error(
+      throw new JobConflictError(
         `Job ${jobId} cannot be deleted: not in quarantine_kept status (may have been deleted or processed)`,
       );
     }

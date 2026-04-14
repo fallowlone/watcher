@@ -5,6 +5,7 @@ import express, {
 } from "express";
 import { resolve } from "path";
 import type { JobStore } from "./job-store.ts";
+import { JobConflictError } from "./job-store.ts";
 import { config, writeConfig, maskSecret, type RawConfig } from "./config.ts";
 import { metrics } from "./metrics.ts";
 
@@ -269,11 +270,8 @@ export function startUiServer(
       await deleteQuarantinedFile(id);
       res.json({ ok: true });
     } catch (e) {
-      const msg = String(e);
-      const isConflict =
-        msg.includes("cannot be deleted") ||
-        msg.includes("not in quarantine_kept");
-      res.status(isConflict ? 409 : 400).json({ error: msg });
+      const isConflict = e instanceof JobConflictError;
+      res.status(isConflict ? 409 : 400).json({ error: String(e) });
     }
   });
 
