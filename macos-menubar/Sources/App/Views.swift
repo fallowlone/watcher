@@ -5,11 +5,16 @@ struct JobRowView: View {
     let job: SandboxJob
     let onCancel: () -> Void
     let onDelete: () -> Void
+    let onRestore: () -> Void
 
     var statusIcon: (name: String, color: Color) {
         switch job.status {
         case "restored":        return ("checkmark.circle.fill", .green)
-        case "quarantine_kept": return ("xmark.shield.fill", .red)
+        case "quarantine_kept":
+            if job.vt_verdict == "oversized" {
+                return ("arrow.down.circle.fill", .orange)
+            }
+            return ("xmark.shield.fill", .red)
         case "cancelled":       return ("nosign", .secondary)
         case "scanning":        return ("magnifyingglass.circle.fill", .orange)
         case "in_quarantine":   return ("lock.shield.fill", .yellow)
@@ -21,7 +26,14 @@ struct JobRowView: View {
     var displayStatus: String {
         switch job.status {
         case "restored":        return "Clean"
-        case "quarantine_kept": return "Infected — quarantined"
+        case "quarantine_kept":
+            if job.vt_verdict == "oversized" {
+                return "Too large — quarantined (no VT scan)"
+            }
+            if job.vt_verdict == "inconclusive" {
+                return "Unclear — in quarantine"
+            }
+            return "Infected — quarantined"
         case "deleted":         return "Deleted"
         case "cancelled":       return "Cancelled"
         case "scanning":        return "Scanning…"
@@ -80,10 +92,21 @@ struct JobRowView: View {
                             .font(.system(size: 10, weight: .semibold))
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
-                            .background(Color.red.opacity(0.15))
-                            .foregroundColor(.red)
+                            .background(
+                                verdict == "oversized"
+                                    ? Color.orange.opacity(0.2)
+                                    : Color.red.opacity(0.15)
+                            )
+                            .foregroundColor(verdict == "oversized" ? .orange : .red)
                             .clipShape(RoundedRectangle(cornerRadius: 4))
                     }
+                    Button(action: onRestore) {
+                        Image(systemName: "arrow.uturn.backward.circle")
+                            .font(.system(size: 12))
+                            .foregroundColor(.accentColor)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Restore to watch folder")
                     Button(action: onDelete) {
                         Image(systemName: "trash")
                             .font(.system(size: 12))
@@ -240,36 +263,52 @@ struct MenuBarContentView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     ForEach(visible) { job in
-                        JobRowView(job: job, onCancel: { store.cancelJob(job.id) }, onDelete: { store.deleteFile(job.id) })
+                        JobRowView(
+                            job: job,
+                            onCancel: { store.cancelJob(job.id) },
+                            onDelete: { store.deleteFile(job.id) },
+                            onRestore: { store.restoreFile(job.id) }
+                        )
                         if job.id != visible.last?.id {
                             Divider().padding(.leading, 42)
                         }
                     }
                 }
             }
-            .frame(minHeight: 80, maxHeight: 500)
+            .frame(minHeight: 160, maxHeight: 700)
         }
     }
 
     private var footer: some View {
-        HStack {
-            if store.threatCount > 0 {
-                Label(
-                    "\(store.threatCount) threat\(store.threatCount == 1 ? "" : "s")",
-                    systemImage: "exclamationmark.shield.fill"
-                )
-                .font(.system(size: 11))
-                .foregroundColor(.red)
+        VStack(spacing: 6) {
+            if let error = store.lastActionError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .transition(.opacity)
             }
-            Spacer()
-            Button("Quit") {
-                NSApplication.shared.terminate(nil)
+            HStack {
+                if store.threatCount > 0 {
+                    Label(
+                        "\(store.threatCount) threat\(store.threatCount == 1 ? "" : "s")",
+                        systemImage: "exclamationmark.shield.fill"
+                    )
+                    .font(.system(size: 11))
+                    .foregroundColor(.red)
+                }
+                Spacer()
+                Button("Quit") {
+                    NSApplication.shared.terminate(nil)
+                }
+                .font(.system(size: 12))
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
             }
-            .font(.system(size: 12))
-            .buttonStyle(.plain)
-            .foregroundColor(.secondary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
     }
 }
