@@ -146,6 +146,7 @@ class Watcher {
         return;
       }
 
+      // Dedupe "add" + "change" events: chokidar fires both when write completes.
       if (this.processingPaths.has(filepath)) {
         return;
       }
